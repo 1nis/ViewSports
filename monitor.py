@@ -8,7 +8,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import WebDriverException
 
 # --- CONFIGURATION ---
 AMU_USER = os.getenv('AMU_USER')
@@ -16,7 +15,7 @@ AMU_PASS = os.getenv('AMU_PASS')
 TARGET_URL = os.getenv('TARGET_URL')
 WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK')
 
-# URL du navigateur (défini par docker-compose)
+# URL du navigateur
 SELENIUM_URL = os.getenv('SELENIUM_URL', 'http://selenium-chrome:4444/wd/hub')
 
 def log(msg):
@@ -36,10 +35,6 @@ def send_discord_alert(message, file_path=None):
         log(f"Erreur Discord: {e}")
 
 def run_browser_session():
-    """
-    Fonction principale qui ouvre le navigateur et boucle à l'infini
-    en rafraichissant la page.
-    """
     chrome_options = Options()
     # Options serveur
     chrome_options.add_argument("--no-sandbox")
@@ -54,18 +49,17 @@ def run_browser_session():
 
     driver = None
     try:
-        log("🚀 Démarrage d'une nouvelle session navigateur...")
+        log("🚀 Démarrage session navigateur...")
         driver = webdriver.Remote(
             command_executor=SELENIUM_URL,
             options=chrome_options
         )
         
-        log(f"Chargement initial de l'URL...")
+        log(f"Chargement de l'URL...")
         driver.get(TARGET_URL)
         
-        # BOUCLE INFINIE (Tant que le navigateur ne plante pas)
         while True:
-            # Petite pause pour laisser le site charger/rediriger
+            # Petite pause technique
             time.sleep(5)
 
             # --- 1. GESTION COOKIES ---
@@ -76,7 +70,6 @@ def run_browser_session():
                 pass
 
             # --- 2. VÉRIFICATION CONNEXION (CAS) ---
-            # Si la session a expiré, on sera redirigé ici automatiquement
             is_login_page = "cas.univ-amu.fr" in driver.current_url
             if not is_login_page:
                 try:
@@ -86,7 +79,7 @@ def run_browser_session():
                     pass
 
             if is_login_page:
-                log("🔑 Session expirée ou nouvelle connexion requise...")
+                log("🔑 Connexion requise...")
                 WebDriverWait(driver, 15).until(EC.visibility_of_element_located((By.ID, "username")))
                 
                 driver.find_element(By.ID, "username").clear()
@@ -100,21 +93,17 @@ def run_browser_session():
                 except:
                     driver.find_element(By.ID, "password").submit()
 
-                log("Attente redirection post-login...")
+                log("Attente redirection...")
                 WebDriverWait(driver, 60).until(lambda d: "cas.univ-amu.fr" not in d.current_url)
-                log("✅ Reconnecté avec succès.")
+                log("✅ Connecté.")
                 time.sleep(3)
 
             # --- 3. RECHERCHE DU CRÉNEAU ---
             try:
-                # On attend le tableau
                 WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
-                
-                # SÉLECTEUR CIBLE
                 xpath_row = "//tr[contains(., 'Lundi') and contains(., '18:30') and contains(., 'JASSAUD')]"
                 target_row = driver.find_element(By.XPATH, xpath_row)
                 
-                # Scroll pour garder la connexion active et voir l'élément
                 driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", target_row)
                 
                 buttons = target_row.find_elements(By.TAG_NAME, "a")
@@ -138,35 +127,41 @@ def run_browser_session():
                     log(f"Statut : Complet ({time.strftime('%H:%M')})")
 
             except Exception as e:
-                log(f"⚠️ Erreur lecture tableau (Session peut-être expirée, on retentera) : {e}")
+                log(f"⚠️ Erreur lecture (Session expirée ?) : {e}")
 
-            # --- 4. ATTENTE ET RAFRAÎCHISSEMENT ---
-            log("💤 Pause 5 min avant rafraîchissement...")
-            time.sleep(300)
+            # --- 4. ATTENTE ACTIVE (KEEP-ALIVE) ---
+            # C'EST ICI QUE ÇA CHANGE : On n'attend plus 5 min d'un coup.
+            # On attend 5 fois 60 secondes en envoyant un "ping" entre chaque.
+            log("💤 Attente 5 min (avec Keep-Alive)...")
             
-            log("🔄 Rafraîchissement de la page...")
+            for i in range(5): # 5 boucles de 60 secondes
+                time.sleep(60)
+                try:
+                    # On demande le titre juste pour maintenir la connexion active
+                    _ = driver.title 
+                except Exception as e:
+                    log("Connexion perdue pendant l'attente.")
+                    raise e # On force le redémarrage immédiat
+
+            log("🔄 Rafraîchissement...")
             driver.refresh()
 
     except Exception as e:
-        log(f"💥 Crash critique du navigateur : {e}")
-        raise e # On relance l'erreur pour que le main() redémarre tout propre
+        log(f"💥 Session terminée : {e}")
+        raise e 
 
     finally:
         if driver:
             try:
                 driver.quit()
-                log("Navigateur fermé proprement.")
             except:
                 pass
 
 if __name__ == "__main__":
-    log("Démarrage Moniteur v7 (Persistent Session)...")
-    
-    # Boucle de sécurité : Si le navigateur plante complètement (mémoire, crash réseau...),
-    # on attend 1 minute et on relance une toute nouvelle session propre.
+    log("Démarrage Moniteur v8 (Anti-Timeout)...")
     while True:
         try:
             run_browser_session()
         except Exception:
-            log("Redémarrage complet du processus dans 60 secondes...")
-            time.sleep(60)
+            log("Redémarrage dans 10s...")
+            time.sleep(10)
