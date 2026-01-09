@@ -1,13 +1,28 @@
 version: '3.8'
 
 services:
+  # 1. Le navigateur Chrome (Image officielle optimisée)
+  selenium-chrome:
+    image: selenium/standalone-chrome:latest
+    container_name: selenium_chrome
+    restart: unless-stopped
+    shm_size: '2gb'
+    ports:
+      - "4444:4444"
+    environment:
+      - SE_NODE_MAX_SESSIONS=1
+
+  # 2. Votre script Python
   amu-sport-bot:
     build: .
     container_name: amu_sport_bot
     restart: unless-stopped
-    shm_size: '2gb'
+    depends_on:
+      - selenium-chrome
     environment:
       - AMU_USER=${AMU_USER}
       - AMU_PASS=${AMU_PASS}
       - TARGET_URL=${TARGET_URL}
       - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
+      # On pointe vers le conteneur Chrome voisin
+      - SELENIUM_URL=http://selenium-chrome:4444/wd/hub
