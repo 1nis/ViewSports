@@ -9,6 +9,16 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+if __name__ == "__main__":
+    # DEBUG : Afficher les versions
+    try:
+        print("Chromium version:", subprocess.getoutput("chromium --version"))
+        print("Driver version:", subprocess.getoutput("chromedriver --version"))
+    except Exception as e:
+        print(f"Impossible de lire les versions: {e}")
+
+    log("Démarrage v2 (Debug + Fix Shm)...")
+
 # --- CONFIGURATION ---
 AMU_USER = os.getenv('AMU_USER')
 AMU_PASS = os.getenv('AMU_PASS')
@@ -31,7 +41,7 @@ def send_discord_alert(message, file_path=None):
 
 def check_sport():
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
@@ -110,9 +120,3 @@ def check_sport():
             
     finally:
         driver.quit()
-
-if __name__ == "__main__":
-    log("Démarrage v2 (Debug + Fix Shm)...")
-    while True:
-        check_sport()
-        time.sleep(300)
