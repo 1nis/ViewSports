@@ -9,16 +9,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-if __name__ == "__main__":
-    # DEBUG : Afficher les versions
-    try:
-        print("Chromium version:", subprocess.getoutput("chromium --version"))
-        print("Driver version:", subprocess.getoutput("chromedriver --version"))
-    except Exception as e:
-        print(f"Impossible de lire les versions: {e}")
-
-    log("Démarrage v2 (Debug + Fix Shm)...")
-
 # --- CONFIGURATION ---
 AMU_USER = os.getenv('AMU_USER')
 AMU_PASS = os.getenv('AMU_PASS')
@@ -41,11 +31,11 @@ def send_discord_alert(message, file_path=None):
 
 def check_sport():
     chrome_options = Options()
+    # Utilisation du nouveau mode headless plus stable
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    # AJOUT : Définir une taille de fenêtre pour éviter les crashs de rendu
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
@@ -62,12 +52,33 @@ def check_sport():
         # 1. GESTION DU LOGIN CAS
         if "cas.univ-amu.fr" in driver.current_url:
             log("Redirection CAS détectée. Connexion...")
-            WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.ID, "username")))
+            
+            # On attend que le formulaire soit bien visible (max 20s)
+            WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, "username")))
+            
+            # Saisie des identifiants (avec .clear() par sécurité)
+            driver.find_element(By.ID, "username").clear()
             driver.find_element(By.ID, "username").send_keys(AMU_USER)
+            
+            driver.find_element(By.ID, "password").clear()
             driver.find_element(By.ID, "password").send_keys(AMU_PASS)
-            driver.find_element(By.ID, "password").submit()
-            log("Connexion envoyée, attente...")
-            time.sleep(5)
+            
+            # CORRECTION : On clique sur le bouton "btn-submit" via JS pour contourner les blocages
+            try:
+                submit_btn = driver.find_element(By.ID, "btn-submit")
+                driver.execute_script("arguments[0].click();", submit_btn)
+                log("Bouton de connexion cliqué.")
+            except Exception as e:
+                log(f"Erreur au clic bouton: {e}. Tentative fallback submit...")
+                driver.find_element(By.ID, "password").submit()
+
+            log("Attente de la fin de redirection...")
+            # On attend explicitement de ne plus être sur le CAS
+            WebDriverWait(driver, 20).until(lambda d: "cas.univ-amu.fr" not in d.current_url)
+            log("✅ Connexion réussie, retour sur le site des sports.")
+            
+            # Petite pause post-login
+            time.sleep(3)
 
         # 2. CIBLAGE PRÉCIS DU CRÉNEAU
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
@@ -95,7 +106,6 @@ def check_sport():
 
             if place_disponible:
                 log("ALERTE : Une place est libérée !")
-                # On prend une photo pour preuve
                 driver.save_screenshot("success.png")
                 send_discord_alert(
                     f"🚨 **JUDO DISPO !**\nLien : {TARGET_URL}", 
@@ -106,17 +116,24 @@ def check_sport():
 
         except Exception as e:
             log(f"⚠️ Ligne du cours introuvable. Erreur: {e}")
+            # On prend un screenshot pour voir à quoi ressemble la page si on ne trouve pas la ligne
             driver.save_screenshot("error_row.png")
             send_discord_alert("⚠️ Erreur : Je ne trouve pas la ligne du cours", "error_row.png")
 
     except Exception as e:
         log(f"Erreur CRITIQUE script : {e}")
-        # En cas de crash, on tente le screenshot ultime
         try:
             driver.save_screenshot("crash.png")
-            send_discord_alert(f"☠️ Le bot a crashé. Voici ce qu'il voyait : {e}", "crash.png")
+            send_discord_alert(f"☠️ Le bot a crashé. Erreur: {e}", "crash.png")
         except:
             log("Impossible de prendre le screenshot du crash.")
             
     finally:
         driver.quit()
+
+if __name__ == "__main__":
+    log("Démarrage v3 (Fix Login + Headless New)...")
+    while True:
+        check_sport()
+        # Vérification toutes les 5 minutes (300 secondes)
+        time.sleep(300)
