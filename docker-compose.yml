@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # 1. Le navigateur Chrome (Image officielle optimisée)
+  # 1. Le Navigateur (Géré par l'image officielle stable)
   selenium-chrome:
     image: selenium/standalone-chrome:latest
     container_name: selenium_chrome
@@ -11,8 +11,12 @@ services:
       - "4444:4444"
     environment:
       - SE_NODE_MAX_SESSIONS=1
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+    # INDISPENSABLE SUR TRUENAS pour éviter les crashs "Connection Refused"
+    security_opt:
+      - seccomp=unconfined
 
-  # 2. Votre script Python
+  # 2. Votre Robot
   amu-sport-bot:
     build: .
     container_name: amu_sport_bot
@@ -24,5 +28,5 @@ services:
       - AMU_PASS=${AMU_PASS}
       - TARGET_URL=${TARGET_URL}
       - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
-      # On pointe vers le conteneur Chrome voisin
+      # On dit au robot où trouver le navigateur
       - SELENIUM_URL=http://selenium-chrome:4444/wd/hub
