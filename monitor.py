@@ -31,109 +31,106 @@ def send_discord_alert(message, file_path=None):
 
 def check_sport():
     chrome_options = Options()
-    # Utilisation du nouveau mode headless plus stable
-    chrome_options.add_argument("--headless=new")
+    
+    # --- OPTIONS ANTI-CRASH (MODE COMPATIBILITÉ) ---
+    # On revient à l'ancien mode headless, plus stable sur les environnements Linux/Docker basiques
+    chrome_options.add_argument("--headless") 
+    
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    
+    # Options supplémentaires pour éviter les erreurs de rendu (Segfaults)
+    chrome_options.add_argument("--disable-software-rasterizer")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-in-process-stack-traces")
+    chrome_options.add_argument("--disable-logging")
+    chrome_options.add_argument("--log-level=3")
+    
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--start-maximized")
-    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36")
+    chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    driver = webdriver.Chrome(options=chrome_options)
-
+    driver = None
     try:
+        driver = webdriver.Chrome(options=chrome_options)
         log("Chargement de la page...")
         driver.get(TARGET_URL)
         
-        # Petite pause pour laisser le temps au DOM de s'initialiser
-        time.sleep(2)
+        time.sleep(3)
 
         # 1. GESTION DU LOGIN CAS
         if "cas.univ-amu.fr" in driver.current_url:
             log("Redirection CAS détectée. Connexion...")
             
-            # On attend que le formulaire soit bien visible (max 20s)
             WebDriverWait(driver, 20).until(EC.visibility_of_element_located((By.ID, "username")))
             
-            # Saisie des identifiants (avec .clear() par sécurité)
             driver.find_element(By.ID, "username").clear()
             driver.find_element(By.ID, "username").send_keys(AMU_USER)
             
             driver.find_element(By.ID, "password").clear()
             driver.find_element(By.ID, "password").send_keys(AMU_PASS)
             
-            # CORRECTION : On clique sur le bouton "btn-submit" via JS pour contourner les blocages
+            # Click JS forcé
             try:
                 submit_btn = driver.find_element(By.ID, "btn-submit")
                 driver.execute_script("arguments[0].click();", submit_btn)
-                log("Bouton de connexion cliqué.")
-            except Exception as e:
-                log(f"Erreur au clic bouton: {e}. Tentative fallback submit...")
+                log("Bouton cliqué (JS).")
+            except:
+                log("Bouton introuvable, tentative Enter...")
                 driver.find_element(By.ID, "password").submit()
 
-            log("Attente de la fin de redirection...")
-            # On attend explicitement de ne plus être sur le CAS
-            WebDriverWait(driver, 20).until(lambda d: "cas.univ-amu.fr" not in d.current_url)
-            log("✅ Connexion réussie, retour sur le site des sports.")
-            
-            # Petite pause post-login
+            log("Attente redirection...")
+            WebDriverWait(driver, 25).until(lambda d: "cas.univ-amu.fr" not in d.current_url)
+            log("✅ Connexion réussie.")
             time.sleep(3)
 
-        # 2. CIBLAGE PRÉCIS DU CRÉNEAU
-        WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
-
-        # Sélecteur spécifique pour Lundi 18:30 + JASSAUD
+        # 2. CIBLAGE DU CRÉNEAU
+        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.TAG_NAME, "tr")))
         xpath_row = "//tr[contains(., 'Lundi') and contains(., '18:30') and contains(., 'JASSAUD')]"
         
         try:
             target_row = driver.find_element(By.XPATH, xpath_row)
-            log("✅ Créneau trouvé dans le tableau.")
+            log("✅ Créneau trouvé.")
             
             buttons = target_row.find_elements(By.TAG_NAME, "a")
             place_disponible = False
             details = []
 
             for btn in buttons:
-                texte_bouton = btn.text.strip()
-                if not texte_bouton: continue
-                
-                if "Complet" not in texte_bouton:
+                txt = btn.text.strip()
+                if not txt: continue
+                if "Complet" not in txt:
                     place_disponible = True
-                    details.append(f"Dispo: '{texte_bouton}'")
+                    details.append(f"Dispo: '{txt}'")
                 else:
                     details.append("Complet")
 
             if place_disponible:
-                log("ALERTE : Une place est libérée !")
+                log("ALERTE : Place dispo !")
                 driver.save_screenshot("success.png")
-                send_discord_alert(
-                    f"🚨 **JUDO DISPO !**\nLien : {TARGET_URL}", 
-                    "success.png"
-                )
+                send_discord_alert(f"🚨 **JUDO DISPO !** {TARGET_URL}", "success.png")
             else:
                 log(f"Pas de place. ({', '.join(details)})")
 
         except Exception as e:
-            log(f"⚠️ Ligne du cours introuvable. Erreur: {e}")
-            # On prend un screenshot pour voir à quoi ressemble la page si on ne trouve pas la ligne
-            driver.save_screenshot("error_row.png")
-            send_discord_alert("⚠️ Erreur : Je ne trouve pas la ligne du cours", "error_row.png")
+            log(f"Ligne du cours non trouvée: {e}")
+            driver.save_screenshot("debug_row.png")
 
     except Exception as e:
-        log(f"Erreur CRITIQUE script : {e}")
-        try:
-            driver.save_screenshot("crash.png")
-            send_discord_alert(f"☠️ Le bot a crashé. Erreur: {e}", "crash.png")
-        except:
-            log("Impossible de prendre le screenshot du crash.")
+        log(f"Erreur script: {e}")
+        # On évite le screenshot ici s'il y a crash du driver
+        send_discord_alert(f"⚠️ Erreur bot: {e}")
             
     finally:
-        driver.quit()
+        if driver:
+            try:
+                driver.quit()
+            except:
+                pass
 
 if __name__ == "__main__":
-    log("Démarrage v3 (Fix Login + Headless New)...")
+    log("Démarrage v4 (Safe Mode)...")
     while True:
         check_sport()
-        # Vérification toutes les 5 minutes (300 secondes)
         time.sleep(300)
