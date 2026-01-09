@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  amu-sport-bot:
+    build: .
+    container_name: amu_sport_bot
+    restart: unless-stopped
+    environment:
+      - AMU_USER=${AMU_USER}
+      - AMU_PASS=${AMU_PASS}
+      - TARGET_URL=${TARGET_URL}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
