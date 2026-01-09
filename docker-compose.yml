@@ -5,6 +5,7 @@ services:
     build: .
     container_name: amu_sport_bot
     restart: unless-stopped
+    shm_size: '2gb'
     environment:
       - AMU_USER=${AMU_USER}
       - AMU_PASS=${AMU_PASS}
