@@ -1,0 +1,35 @@
+{
+  "saved_at": "2026-01-21T21:23:02.326621",
+  "workspace": "C:\\Users\\elpip\\Desktop\\Projets\\ViewSports",
+  "version": "3.0",
+  "boss": [
+    {
+      "role": "user",
+      "content": "[CONTEXTE PROJET]\nFichiers: docker-compose.yml, Dockerfile, monitor.py, requirements.txt\nDossiers: \nTech: Python, Docker"
+    }
+  ],
+  "coder": [],
+  "reviewer": [],
+  "chat_history": [],
+  "files": [
+    "README.md",
+    "README.md"
+  ],
+  "project_summary": "",
+  "usage": {
+    "total_input_tokens": 2998,
+    "total_output_tokens": 304,
+    "calls": [
+      {
+        "agent": "boss",
+        "in": 1491,
+        "out": 132
+      },
+      {
+        "agent": "boss",
+        "in": 1507,
+        "out": 172
+      }
+    ]
+  }
+}
