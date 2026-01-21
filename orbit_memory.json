@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-01-21T21:23:02.326621",
+  "saved_at": "2026-01-21T21:23:28.319362",
   "workspace": "C:\\Users\\elpip\\Desktop\\Projets\\ViewSports",
   "version": "3.0",
   "boss": [
@@ -13,17 +13,23 @@
   "chat_history": [],
   "files": [
     "README.md",
+    "README.md",
     "README.md"
   ],
   "project_summary": "",
   "usage": {
-    "total_input_tokens": 2998,
-    "total_output_tokens": 304,
+    "total_input_tokens": 4505,
+    "total_output_tokens": 476,
     "calls": [
       {
         "agent": "boss",
         "in": 1491,
         "out": 132
+      },
+      {
+        "agent": "boss",
+        "in": 1507,
+        "out": 172
       },
       {
         "agent": "boss",
